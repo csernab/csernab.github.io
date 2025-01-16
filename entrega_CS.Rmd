@@ -1,0 +1,109 @@
+---
+title: "Entrega Dashboards con R y RStudio 2025"
+author: "C. Serna"
+date: "`r Sys.Date()`"
+output: 
+  flexdashboard::flex_dashboard:
+    theme: united
+    source_code: embed
+    favicon: logos/ucm_favicon.png
+    navbar:
+      - { title: "Datasets", href: "https://www.ucm.es/la-universidad-en-cifras", align: left }
+---
+
+
+```{r setup, include=FALSE}
+
+# Primero cargamos los paquetes necesarios
+library(flexdashboard)
+library(readr) 
+library(dplyr)
+library(ggplot2)
+library(DT)
+library(plotly)
+
+# Vamos a procesar los datos para realizar nuestros análisis
+df <- read_delim("datos_tratados.csv", delim = ";")
+df$CURSO <- factor(df$CURSO)
+df$CENTRO <- factor(df$CENTRO)
+
+# Preparamos los datos para no perder información de curso y centro
+df_M <- select(df,CURSO,CENTRO,TOTAL_MUJERES)
+df_H <- select(df,CURSO,CENTRO,TOTAL_HOMBRES)
+colnames(df_M)[3] <-"TOTAL"
+colnames(df_H)[3] <-"TOTAL"
+
+df_M$GENERO <- rep('Mujer', times = nrow(df_M))
+df_H$GENERO <- rep('Hombre', times = nrow(df_H))
+
+# Trabajaremos en la visualización a partir de este data frame
+df_total <- bind_rows(df_M,df_H)
+
+```
+
+
+# Datos por SEXO
+## Columna 1
+### Datos de MUJERES
+```{r}
+# Crear una tabla interactiva con DT
+tabla_interactiva  <- datatable(df_M, options = list( pageLength = 10))
+tabla_interactiva
+```
+
+### Datos de HOMBRES
+```{r}
+# Crear una tabla interactiva con DT
+tabla_interactiva  <- datatable(df_H, options = list( pageLength = 10))
+tabla_interactiva
+```
+
+
+# Visualización {data-orientation=rows}
+## Row 1
+### Total de alumnos por curso
+```{r fig.width=10, fig.height=5}
+ggplot(df, aes(x = CURSO, y = TOTAL)) +
+  geom_col(fill = "grey") +
+  labs(title = "U.C.M.", x = "Curso", y = "Total de alumno/as.",
+  ) + theme_bw() +
+  theme(axis.text.x = element_text(angle = 30, vjust = 1, hjust = 1, size = 8))
+```
+
+## Row 1
+### Total de alumnos por curso y género
+```{r fig.width=10, fig.height=5}
+ggplot(df_total, aes(x = CURSO, y = TOTAL, fill = GENERO)) +
+  geom_col(position = "dodge") +
+  labs(title = "U.C.M.", x = "Curso", y = "Total de alumno/as.",
+  ) + theme_bw() +
+  theme(axis.text.x = element_text(angle = 30, vjust = 1, hjust = 1, size = 8)) +
+  scale_fill_manual(values = c("#2a9d8f", "#e07a5f"))
+```
+
+# Datos interactivos {data-orientation=rows}
+## Row 1 {data-height=140}
+### Objetivo de este análisis
+El objetivo de este análisis con *datos interactivos* es comprobar visualmente la diferencia entre **hombres** y **mujeres** en carreras de ciencias de la salud vs carreras tecnológicas. Para ellos hemos seleccionado los siguientes centros:
+
+1. __CIENCIAS DE LA SALUD__: BIOLOGICAS, MEDICINA y VETERINARIA
+2. __TECNOLÓGICAS__: INFORMÁTICA, FÍSICAS y MATEMÁTICAS
+
+## Row 2
+### Comparación hombres y mujeres por centro
+```{r}
+
+df_filt <- filter(df_total, CENTRO == "BIOLOGICAS" | CENTRO == "MEDICINA" | CENTRO == "VETERINARIA"
+                  | CENTRO == "INFORMATICA" | CENTRO == "FISICAS" | CENTRO == "MATEMATICAS")
+  
+g1 <- ggplot(df_filt, aes(x = CURSO, y = TOTAL, fill = GENERO)) +
+  geom_col(position = "fill") +
+  labs(x = "",
+       y = "Porcentaje") +
+  scale_fill_manual(values = c("Mujer" = "#e07a5f", "Hombre" = "#2a9d8f")) +
+  theme_bw() +
+  facet_wrap(~ CENTRO, scale = "free_y") +
+  theme(axis.text.x = element_text(angle = 30, vjust = 1, hjust = 1, size = 7))
+g2 <- ggplotly(g1)
+g2
+```
