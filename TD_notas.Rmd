@@ -1,0 +1,112 @@
+---
+title: "Notas TD Epidemiología 2024-25"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(readxl)
+library(tidyverse)
+library(lubridate)
+library(DT)
+library(plotly)
+
+# Establecemos el locale en español para interpretar los meses
+Sys.setlocale("LC_TIME", "es_ES.UTF-8")
+
+# Cargamos el archivo Excel
+df <- read_excel("Notas_TD1.xlsx")
+
+# Convertir la columna "Grupo" a factor con niveles del TD1 al TD16
+df <- df %>% mutate(Grupo = factor(Grupo, levels = paste0("TD", 1:16)))
+
+# Convertir las columnas "Comienzo" y "Final" a fecha-hora y calcular tiempo de respuesta en minutos
+df <- df %>%
+  mutate(
+    Comienzo_dt = if_else(!is.na(Comienzo),
+                          as.POSIXct(strptime(Comienzo, format="%d de %B de %Y %H:%M", tz="UTC")),
+                          as.POSIXct(NA_character_, tz="UTC")),
+    Final_dt = if_else(!is.na(Final),
+                       as.POSIXct(strptime(Final, format="%d de %B de %Y %H:%M", tz="UTC")),
+                       as.POSIXct(NA_character_, tz="UTC")),
+    tiempo_resp = as.numeric(difftime(Final_dt, Comienzo_dt, units = "mins"))
+  )
+```
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Total estudiantes
+
+```{r}
+# Seleccionamos las columnas de interés para la tabla interactiva
+tabla_interactiva <- df %>% 
+  arrange(Grupo) %>% 
+  select(Apellidos, Nombre, Correo, Grupo, Nota, tiempo_resp)
+# Mostramos la tabla formateando la columna de tiempo para 2 decimales
+datatable(tabla_interactiva,
+          options = list(pageLength = 30),
+          colnames = c("Apellidos", "Nombre", "Correo", "Grupo", "Nota", "Tiempo (mins)")
+) %>% formatRound("tiempo_resp", 0)
+
+```
+
+Column {data-width=450}
+-----------------------------------------------------------------------
+
+### Resumen por grupo
+
+```{r}
+# Creamos una tabla resumen agrupada por 'Grupo'
+resumen <- df %>%
+  group_by(Grupo) %>%
+  summarise(
+    Total = n(),
+    `Participacion (%)` = round(sum(!is.na(Nota)) / n() * 100, 1),
+    Nota_Min = min(Nota, na.rm = TRUE),
+    Nota_Max = max(Nota, na.rm = TRUE),
+    Nota_Media = round(mean(Nota, na.rm = TRUE), 2),
+    Tiempo_Medio = round(mean(tiempo_resp, na.rm = TRUE), 2)
+  )
+
+datatable(resumen, options = list(pageLength = 16))
+
+```
+
+### Notas por grupo
+
+```{r}
+# Calculamos los estadísticos para cada grupo
+stats <- df %>%
+  filter(!is.na(Nota)) %>%
+  group_by(Grupo) %>%
+  summarise(
+    mediana = round(median(Nota),2),
+    Q1 = round(quantile(Nota, 0.25),2),
+    Q3 = round(quantile(Nota, 0.75),2)
+  )
+
+# Creamos el boxplot interactivo con plotly: 
+p <- plot_ly(type = "box") 
+for(g in levels(df$Grupo)) {
+  datos <- df %>% filter(Grupo == g, !is.na(Nota))
+  estad <- stats %>% filter(Grupo == g)
+  p <- add_trace(p, 
+                 y = datos$Nota,
+                 x = rep(g, nrow(datos)),
+                 name = g,
+                 boxpoints = "all",
+                 jitter = 0, pointpos = 0,
+                 hoverinfo = "text",
+                 text = paste0("Mediana: ", estad$mediana,
+                               "<br>Q1: ", estad$Q1,
+                               "<br>Q3: ", estad$Q3)
+  )
+}
+p <- layout(p, title = "Distribución de notas por grupo",
+            xaxis = list(title = "Grupo"), yaxis = list(title = "Nota"))
+p
+```
